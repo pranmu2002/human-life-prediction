@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="hero">
+  <h1>Estimate your remaining years & days</h1>
+  <p class="muted">⚠️ Educational only — not medical advice. Create an account to save and download PDFs.</p>
+
+  {% if not current_user %}
+    <div class="cta">
+      <a class="btn" href="/register">Get Started</a>
+      <a class="btn-outline" href="/login">I already have an account</a>
+    </div>
+  {% else %}
+    <div class="cta">
+      <a class="btn" href="/dashboard">Go to Dashboard</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -11,11 +11,9 @@
   <nav class="nav">
     <a class="brand" href="/">🫀 Life Predictor</a>
     <div class="nav-right">
-      {% if session.get("user_id") %}
+      {% if current_user %}
         <a href="/dashboard">Dashboard</a>
-        {% if session.get("is_admin") %}
-          <a href="/admin">Admin</a>
-        {% endif %}
+        {% if current_user.is_admin %}<a href="/admin">Admin</a>{% endif %}
         <a href="/logout">Logout</a>
       {% else %}
         <a href="/login">Login</a>
@@ -41,3 +39,4 @@
   <script src="/static/app.js"></script>
 </body>
 </html>
+
