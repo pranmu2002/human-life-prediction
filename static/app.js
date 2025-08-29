@@ -1,0 +1,1 @@
+// Minimal client JS. You can add validations here if needed.

@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Login</h2>
+<form method="post" class="card form" novalidate>
+  <label> Email or Name
+    <input type="text" name="email_or_name" required>
+  </label>
+  <label> Password
+    <input type="password" name="password" required>
+  </label>
+  <button class="btn" type="submit">Login</button>
+  <div class="links">
+    <a href="/forgot">Forgot password?</a>
+    <a href="/register">Create account</a>
+  </div>
+</form>
+{% endblock %}

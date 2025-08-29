@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Admin</h2>
+<p class="muted">Only admins can see this page. Built-in admin: pran (swagatoroy2002@gmail.com)</p>
+
+<h3>Users</h3>
+<div class="cards">
+  {% for u in users %}
+    <div class="card">
+      <div class="row between">
+        <div><b>{{ u.name }}</b> — {{ u.email }}</div>
+        <div>{% if u.is_admin %}<span class="badge">ADMIN</span>{% endif %}</div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<h3>Recent Predictions</h3>
+<div class="cards">
+  {% for p in predictions %}
+    <div class="card">
+      <div class="row between">
+        <div>#{{ p.id }} — User {{ p.user_id }}</div>
+        <div>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+      </div>
+      <div>LE: {{ p.predicted_life_expectancy }} | Left: {{ p.years_left }} yrs ({{ p.days_left }} days)</div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

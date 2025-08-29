@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: life-predictor
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
+    plan: free
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: 587
+      - key: EMAIL_USE_TLS
+        value: "true"
+      # Set these securely in the Render dashboard:
+      # - key: EMAIL_USER
+      #   value: your_sender_email@example.com
+      # - key: EMAIL_PASS
+      #   value: your_app_password

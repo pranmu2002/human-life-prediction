@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Dashboard</h2>
+<form method="post" action="/predict" class="card grid-2" novalidate>
+  <label> Age <input type="number" name="age" min="1" max="120" required></label>
+  <label> Sex
+    <select name="sex" required>
+      <option value="male">Male</option>
+      <option value="female">Female</option>
+      <option value="other">Other</option>
+    </select>
+  </label>
+  <label> BMI <input type="number" name="bmi" step="0.1" min="10" max="60" required></label>
+  <label> Diabetic?
+    <select name="diabetic">
+      <option value="false">No</option>
+      <option value="true">Yes</option>
+    </select>
+  </label>
+  <label> Systolic BP (mmHg) <input type="number" name="systolic_bp" min="80" max="220" required></label>
+  <label> Smoker?
+    <select name="smoker">
+      <option value="false">No</option>
+      <option value="true">Yes</option>
+    </select>
+  </label>
+  <label> Daily Sleep (hours) <input type="number" step="0.1" name="daily_sleep_hours" min="0" max="24" required></label>
+  <label> Weekly Exercise (minutes) <input type="number" name="weekly_exercise_minutes" min="0" max="10000" required></label>
+  <label> Alcohol units per week <input type="number" name="alcohol_units_per_week" min="0" max="60" required></label>
+  <label> Fruits & Veg servings/day <input type="number" name="fruits_veg_servings_per_day" min="0" max="12" required></label>
+  <label> Stress level (1-10) <input type="number" name="stress_level" min="1" max="10" required></label>
+  <label> Total Cholesterol (mg/dL) <input type="number" name="cholesterol" min="100" max="400" required></label>
+
+  <button class="btn full" type="submit">Predict & Save</button>
+</form>
+
+<h3>Your Predictions</h3>
+<div class="cards">
+  {% for p in predictions %}
+    <div class="card">
+      <div class="row between">
+        <strong>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</strong>
+        <a class="btn-sm" href="/download/{{ p.id }}">Download PDF</a>
+      </div>
+      <div class="row">
+        <div>Life Expectancy: <b>{{ p.predicted_life_expectancy }}</b> yrs</div>
+      </div>
+      <div class="row">
+        <div>Years left: <b>{{ p.years_left }}</b> | Days left: <b>{{ p.days_left }}</b></div>
+      </div>
+    </div>
+  {% else %}
+    <p class="muted">No predictions yet. Fill the form above to create one.</p>
+  {% endfor %}
+</div>
+{% endblock %}
