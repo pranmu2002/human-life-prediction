@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2>Dashboard</h2>
-<form method="post" action="/predict" class="card grid-2" novalidate>
+
+<form method="post" class="card grid-2" novalidate>
   <label> Age <input type="number" name="age" min="1" max="120" required></label>
   <label> Sex
     <select name="sex" required>

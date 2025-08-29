@@ -1,87 +1,83 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
+import datetime
+from flask import Flask, render_template, redirect, url_for, request, flash, session, send_file
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-import smtplib
-import random
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ---------------- CONFIG ----------------
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev_secret_key")
-
-# Database config (SQLite by default, can switch to PostgreSQL if needed)
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", "sqlite:///users.db"
-).replace("postgres://", "postgresql://")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev_secret")
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///life_predictor.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# ---------------- MODELS ----------------
+# ----------------- MODELS -----------------
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
+    password = db.Column(db.String(200), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
+class Prediction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    predicted_life_expectancy = db.Column(db.Float)
+    years_left = db.Column(db.Float)
+    days_left = db.Column(db.Integer)
 
-# ---------------- EMAIL ----------------
-def send_email(receiver, subject, body):
-    try:
-        smtp_host = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-        smtp_port = int(os.environ.get("EMAIL_PORT", 587))
-        smtp_user = os.environ.get("EMAIL_USER")
-        smtp_pass = os.environ.get("EMAIL_PASS")
-
-        msg = MIMEMultipart()
-        msg["From"] = smtp_user
-        msg["To"] = receiver
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
-
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.sendmail(smtp_user, receiver, msg.as_string())
-        server.quit()
-        return True
-    except Exception as e:
-        print("Email error:", e)
-        return False
+    user = db.relationship("User", backref=db.backref("predictions", lazy=True))
 
 
-# ---------------- LIFE PREDICTION ----------------
-def predict_life_expectancy(data):
-    base = 80
-    base -= data.get("age", 0) * 0.2
-    if data.get("diabetic"):
-        base -= 8
-    if data.get("blood_pressure") == "high":
-        base -= 6
-    if data.get("smoking"):
-        base -= 10
-    if data.get("sleep", 7) < 6:
-        base -= 5
-    if data.get("exercise", 0) < 3:
-        base -= 4
-    if data.get("alcohol"):
-        base -= 6
-    if data.get("junk_food"):
-        base -= 3
-    return max(30, round(base))
+# ----------------- HELPERS -----------------
+def predict_life(data):
+    """Simple heuristic for demo only (not medical advice)."""
+    base_expectancy = 80
+
+    age = int(data["age"])
+    bmi = float(data["bmi"])
+    diabetic = data["diabetic"] == "true"
+    systolic_bp = int(data["systolic_bp"])
+    smoker = data["smoker"] == "true"
+    sleep = float(data["daily_sleep_hours"])
+    exercise = int(data["weekly_exercise_minutes"])
+    alcohol = int(data["alcohol_units_per_week"])
+    fruits = int(data["fruits_veg_servings_per_day"])
+    stress = int(data["stress_level"])
+    cholesterol = int(data["cholesterol"])
+
+    # Adjust expectancy
+    if diabetic: base_expectancy -= 5
+    if smoker: base_expectancy -= 7
+    if bmi < 18 or bmi > 30: base_expectancy -= 3
+    if systolic_bp > 140: base_expectancy -= 4
+    if sleep < 6 or sleep > 9: base_expectancy -= 2
+    if exercise > 150: base_expectancy += 2
+    if alcohol > 14: base_expectancy -= 3
+    if fruits >= 5: base_expectancy += 2
+    if stress > 7: base_expectancy -= 2
+    if cholesterol > 240: base_expectancy -= 3
+
+    years_left = max(base_expectancy - age, 0)
+    days_left = int(years_left * 365)
+
+    return base_expectancy, years_left, days_left
 
 
-# ---------------- ROUTES ----------------
+def current_user():
+    if "user_id" in session:
+        return User.query.get(session["user_id"])
+    return None
+
+
+# ----------------- ROUTES -----------------
 @app.route("/")
-def index():
-    return render_template("index.html")
-
+def home():
+    return render_template("home.html", current_user=current_user())
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -91,18 +87,18 @@ def register():
         password = request.form["password"]
 
         if User.query.filter_by(email=email).first():
-            flash("Email already registered!", "danger")
+            flash("Email already registered", "error")
             return redirect(url_for("register"))
 
         hashed_pw = generate_password_hash(password)
-        new_user = User(name=name, email=email, password_hash=hashed_pw)
-        db.session.add(new_user)
+        user = User(name=name, email=email, password=hashed_pw)
+
+        db.session.add(user)
         db.session.commit()
-
-        flash("Registration successful! Please login.", "success")
+        flash("Registration successful, please log in.", "success")
         return redirect(url_for("login"))
-    return render_template("register.html")
 
+    return render_template("register.html", current_user=current_user())
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -110,121 +106,75 @@ def login():
         email = request.form["email"]
         password = request.form["password"]
 
+        # Check admin fixed account
+        if email == "swagatoroy2002@gmail.com" and password == "moyu2002":
+            admin = User.query.filter_by(email=email).first()
+            if not admin:
+                admin = User(name="pran", email=email,
+                             password=generate_password_hash(password),
+                             is_admin=True)
+                db.session.add(admin)
+                db.session.commit()
+            session["user_id"] = admin.id
+            return redirect(url_for("dashboard"))
+
         user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password_hash, password):
+        if user and check_password_hash(user.password, password):
             session["user_id"] = user.id
-            session["is_admin"] = user.is_admin
-            session["name"] = user.name
-            flash("Login successful!", "success")
             return redirect(url_for("dashboard"))
         else:
-            flash("Invalid email or password", "danger")
-            return redirect(url_for("login"))
-    return render_template("login.html")
+            flash("Invalid credentials", "error")
 
-
-@app.route("/forgot", methods=["GET", "POST"])
-def forgot():
-    if request.method == "POST":
-        email = request.form["email"]
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            flash("Email not found", "danger")
-            return redirect(url_for("forgot"))
-
-        code = str(random.randint(1000, 9999))
-        session["reset_code"] = code
-        session["reset_email"] = email
-
-        send_email(email, "Password Reset Code", f"Your reset code is {code}")
-        flash("Reset code sent to your email", "info")
-        return redirect(url_for("reset_password"))
-    return render_template("forgot.html")
-
-
-@app.route("/reset", methods=["GET", "POST"])
-def reset_password():
-    if request.method == "POST":
-        code = request.form["code"]
-        new_pw = request.form["password"]
-
-        if code == session.get("reset_code"):
-            email = session.get("reset_email")
-            user = User.query.filter_by(email=email).first()
-            if user:
-                user.password_hash = generate_password_hash(new_pw)
-                db.session.commit()
-                flash("Password reset successful!", "success")
-                return redirect(url_for("login"))
-        flash("Invalid code!", "danger")
-        return redirect(url_for("reset_password"))
-    return render_template("reset.html")
-
-
-@app.route("/dashboard", methods=["GET", "POST"])
-def dashboard():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        data = {
-            "age": int(request.form["age"]),
-            "diabetic": request.form.get("diabetic") == "yes",
-            "blood_pressure": request.form["blood_pressure"],
-            "smoking": request.form.get("smoking") == "yes",
-            "sleep": int(request.form["sleep"]),
-            "exercise": int(request.form["exercise"]),
-            "alcohol": request.form.get("alcohol") == "yes",
-            "junk_food": request.form.get("junk_food") == "yes",
-        }
-        years_left = predict_life_expectancy(data)
-        return render_template("result.html", years=years_left)
-
-    return render_template("dashboard.html")
-
-
-@app.route("/download/<int:years>")
-def download(years):
-    buffer = BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    p.drawString(100, 750, f"Life Expectancy Prediction")
-    p.drawString(100, 720, f"Estimated years left: {years}")
-    p.save()
-
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name="prediction.pdf")
-
+    return render_template("login.html", current_user=current_user())
 
 @app.route("/logout")
 def logout():
-    session.clear()
-    flash("Logged out successfully.", "info")
-    return redirect(url_for("login"))
+    session.pop("user_id", None)
+    flash("Logged out successfully", "success")
+    return redirect(url_for("home"))
+
+@app.route("/dashboard", methods=["GET", "POST"])
+def dashboard():
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        expectancy, years_left, days_left = predict_life(request.form)
+        prediction = Prediction(user_id=user.id,
+                                predicted_life_expectancy=expectancy,
+                                years_left=years_left,
+                                days_left=days_left)
+        db.session.add(prediction)
+        db.session.commit()
+        flash("Prediction saved!", "success")
+        return redirect(url_for("dashboard"))
+
+    predictions = Prediction.query.filter_by(user_id=user.id).order_by(Prediction.created_at.desc()).all()
+    return render_template("dashboard.html", predictions=predictions, current_user=user)
+
+@app.route("/download/<int:pid>")
+def download(pid):
+    pred = Prediction.query.get_or_404(pid)
+    if pred.user_id != session.get("user_id"):
+        flash("Unauthorized", "error")
+        return redirect(url_for("dashboard"))
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    pdf.drawString(100, 750, "Life Prediction Report")
+    pdf.drawString(100, 720, f"Life Expectancy: {pred.predicted_life_expectancy:.1f} years")
+    pdf.drawString(100, 700, f"Years left: {pred.years_left:.1f}")
+    pdf.drawString(100, 680, f"Days left: {pred.days_left}")
+    pdf.save()
+
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="prediction.pdf", mimetype="application/pdf")
 
 
-# ---------------- INIT DB & ADMIN ----------------
-def init_db_and_admin():
-    with app.app_context():
-        db.create_all()
-        try:
-            admin_email = "swagatoroy2002@gmail.com"
-            admin_name = "pran"
-            admin_password = "moyu2002"
-            admin = User.query.filter_by(email=admin_email).first()
-            if not admin:
-                admin = User(
-                    name=admin_name,
-                    email=admin_email,
-                    password_hash=generate_password_hash(admin_password),
-                    is_admin=True,
-                )
-                db.session.add(admin)
-                db.session.commit()
-        except Exception:
-            db.session.rollback()
+# ----------------- INIT -----------------
+with app.app_context():
+    db.create_all()
 
-
-# ---------------- MAIN ----------------
 if __name__ == "__main__":
-    init_db_and_admin()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=True, host="0.0.0.0", port=5000)

@@ -3,7 +3,8 @@
 <section class="hero">
   <h1>Estimate your remaining years & days</h1>
   <p class="muted">Educational only — not medical advice. Create an account to save and download PDFs.</p>
-  {% if not current_user.is_authenticated %}
+  
+  {% if not session.get("user_id") %}
     <div class="cta">
       <a class="btn" href="/register">Get Started</a>
       <a class="btn-outline" href="/login">I already have an account</a>
